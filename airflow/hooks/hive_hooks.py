@@ -572,6 +572,7 @@ class HiveServer2Hook(BaseHook):
     """
     def __init__(self, hiveserver2_conn_id='hiveserver2_default'):
         self.hiveserver2_conn_id = hiveserver2_conn_id
+        self.override_schema = None
 
     def get_conn(self):
         db = self.get_connection(self.hiveserver2_conn_id)
@@ -594,10 +595,11 @@ class HiveServer2Hook(BaseHook):
             auth_mechanism=auth_mechanism,
             kerberos_service_name=kerberos_service_name,
             user=db.login,
-            database=db.schema or 'default')
+            database=self.override_schema or db.schema or 'default')
 
-    def get_results(self, hql, schema='default', arraysize=1000):
+    def get_results(self, hql, schema=None, arraysize=1000):
         from impala.error import ProgrammingError
+        self.override_schema = schema
         with self.get_conn() as conn:
             if isinstance(hql, basestring):
                 hql = [hql]
@@ -627,17 +629,16 @@ class HiveServer2Hook(BaseHook):
             self,
             hql,
             csv_filepath,
-            schema='default',
+            schema=None,
             delimiter=',',
             lineterminator='\r\n',
             output_header=True,
             fetch_size=1000):
-        schema = schema or 'default'
+        self.override_schema = schema
         with self.get_conn() as conn:
             with conn.cursor() as cur:
                 logging.info("Running query: " + hql)
                 cur.execute(hql)
-                schema = cur.description
                 with open(csv_filepath, 'wb') as f:
                     writer = csv.writer(f,
                                         delimiter=delimiter,
@@ -656,7 +657,7 @@ class HiveServer2Hook(BaseHook):
                         logging.info("Written {0} rows so far.".format(i))
                     logging.info("Done. Loaded a total of {0} rows.".format(i))
 
-    def get_records(self, hql, schema='default'):
+    def get_records(self, hql, schema=None):
         """
         Get a set of records from a Hive query.
 
@@ -667,7 +668,7 @@ class HiveServer2Hook(BaseHook):
         """
         return self.get_results(hql, schema=schema)['data']
 
-    def get_pandas_df(self, hql, schema='default'):
+    def get_pandas_df(self, hql, schema=None):
         """
         Get a pandas dataframe from a Hive query
 
